@@ -28,6 +28,29 @@ esp_err_t uart_handler::init()
         return ret;
     }
 
+    lvgl_port_lock(pdMS_TO_TICKS(100));
+
+    if (base_obj != nullptr) {
+        lv_obj_delete(base_obj);
+    }
+
+    base_obj = lv_obj_create(lv_scr_act());
+    if (base_obj == nullptr) {
+        ESP_LOGE(TAG, "Can't draw base object!!");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lv_obj_set_size(base_obj, 240, 240);
+    lv_obj_set_scrollbar_mode(base_obj, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_align(base_obj, LV_ALIGN_OUT_TOP_LEFT, 0, 0);
+    lv_obj_set_style_bg_opa(base_obj, 0, 0);
+    lv_obj_set_style_border_width(base_obj, 0, 0);
+    lv_obj_set_style_radius(base_obj, 0, 0);
+    lv_obj_set_style_pad_all(base_obj, 0, 0);
+    lv_obj_set_style_outline_width(base_obj, 0, 0);
+
+    lvgl_port_unlock();
+
     xTaskCreateWithCaps(uart_evt_task_func, "uart_rx_task", 16384, this, 6, nullptr, MALLOC_CAP_INTERNAL);
     return ret;
 }

@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include "lhs154kc.hpp"
+#include "uart_handler.hpp"
 
 
 extern "C" void app_main(void)
@@ -13,13 +14,7 @@ extern "C" void app_main(void)
     auto &lcd = lhs154kc::instance();
 
     ESP_ERROR_CHECK(lcd.init());
-
-    lhs154kc::lock();
-    auto *label = lv_label_create(lv_scr_act());
-
-    lv_obj_align(label, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_label_set_text(label, "Privyet!");
-    lhs154kc::unlock();
+    uart_handler::instance().init();
 
     vTaskDelay(portMAX_DELAY);
 }

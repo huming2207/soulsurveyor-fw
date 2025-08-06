@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <driver/uart.h>
 #include <esp_err.h>
 
