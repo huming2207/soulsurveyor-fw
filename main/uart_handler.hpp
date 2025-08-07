@@ -26,6 +26,7 @@ public:
     void handle_uart_read(uint8_t *buf, size_t len);
     void screen_draw_error();
     void screen_draw_readings(const std::string &rssi, const std::string &snr);
+    void screen_clear();
 
 private:
     static void uart_evt_task_func(void *_ctx);

@@ -4,6 +4,9 @@
 #include <driver/gpio.h>
 #include <esp_log.h>
 #include "uart_handler.hpp"
+
+#include <algorithm>
+
 #include "esp_lvgl_port.h"
 
 esp_err_t uart_handler::init()
@@ -18,7 +21,7 @@ esp_err_t uart_handler::init()
     uart_config.flow_ctrl = UART_HW_FLOWCTRL_DISABLE;
     uart_config.source_clk = UART_SCLK_APB;
 
-    auto ret = uart_driver_install(port, 512, 512, 32, &uart_evt_queue, 0);
+    auto ret = uart_driver_install(port, 10240, 512, 32, &uart_evt_queue, 0);
     ret = ret ?: uart_param_config(port, &uart_config);
     ret = ret ?: uart_set_pin(port, GPIO_NUM_NC, GPIO_NUM_9, GPIO_NUM_NC, GPIO_NUM_NC);
     ret = ret ?: uart_enable_pattern_det_baud_intr(port, '>', 3, 9, 0, 0);
@@ -51,14 +54,14 @@ esp_err_t uart_handler::init()
 
     lvgl_port_unlock();
 
-    xTaskCreateWithCaps(uart_evt_task_func, "uart_rx_task", 16384, this, 6, nullptr, MALLOC_CAP_INTERNAL);
+    xTaskCreateWithCaps(uart_evt_task_func, "uart_rx_task", 32768, this, 6, nullptr, MALLOC_CAP_SPIRAM);
     return ret;
 }
 
 void uart_handler::uart_evt_task_func(void *_ctx)
 {
     auto *ctx = static_cast<uart_handler *>(_ctx);
-    uint8_t rx_buf[1024] = { 0 };
+    uint8_t rx_buf[16384] = { 0 };
     while (true) {
         uart_event_t event = {};
         if (xQueueReceive(ctx->uart_evt_queue, &event, portMAX_DELAY) != pdTRUE) {
@@ -81,8 +84,8 @@ void uart_handler::uart_evt_task_func(void *_ctx)
                 if (pos == -1 || pos > sizeof(rx_buf)) {
                     // Invalid pattern position
                     uart_flush_input(ctx->port);
-                    ESP_LOGE(TAG, "uart_read: got garbage data?");
-                    return;
+                    ESP_LOGE(TAG, "uart_read: got garbage data? pos=%d", pos);
+                    break;
                 }
 
                 int preamble_len = pos + 3;
@@ -109,6 +112,7 @@ void uart_handler::uart_evt_task_func(void *_ctx)
                 }
 
                 rx_buf[payload_len] = '\0';
+                ESP_LOGI(TAG, "Got: %s len=%u", rx_buf, payload_len);
                 ctx->handle_uart_read(rx_buf, payload_len);
 
                 memset(rx_buf, 0, sizeof(rx_buf));
@@ -125,7 +129,19 @@ void uart_handler::uart_evt_task_func(void *_ctx)
 
 void uart_handler::handle_uart_read(uint8_t *buf, const size_t len)
 {
+    ESP_LOGI(TAG, "uart_read: len=%u", len);
     auto uart_str = std::string((char *)buf, len);
+
+    if (strstr((const char *)buf, "TIMEOUT") != nullptr) {
+        screen_draw_error();
+        uart_flush(port);
+        return;
+    }
+
+    if (strstr((const char *)buf, "CLEAR") != nullptr) {
+        // screen_clear(); // Doesn't work, don't clear
+        return;
+    }
 
     size_t comma_pos = uart_str.find(',');
     if (comma_pos == std::string_view::npos) {
@@ -133,17 +149,21 @@ void uart_handler::handle_uart_read(uint8_t *buf, const size_t len)
     }
 
     std::string rssi = uart_str.substr(0, comma_pos);
+    std::erase(rssi, '>');
     std::string snr = uart_str.substr(comma_pos + 1);
+    std::erase(snr, '>');
 
     screen_draw_readings(rssi, snr);
 }
 
 void uart_handler::screen_draw_error()
 {
-    lvgl_port_lock(pdMS_TO_TICKS(100));
-
+    if (!lvgl_port_lock(pdMS_TO_TICKS(1000))) {
+        return;
+    }
     if (base_obj != nullptr) {
         lv_obj_delete(base_obj);
+        base_obj = nullptr;
     }
 
     base_obj = lv_obj_create(lv_scr_act());
@@ -172,10 +192,13 @@ void uart_handler::screen_draw_error()
 
 void uart_handler::screen_draw_readings(const std::string &rssi, const std::string &snr)
 {
-    lvgl_port_lock(pdMS_TO_TICKS(100));
+    if (!lvgl_port_lock(pdMS_TO_TICKS(1000))) {
+        return;
+    }
 
     if (base_obj != nullptr) {
         lv_obj_delete(base_obj);
+        base_obj = nullptr;
     }
 
     base_obj = lv_obj_create(lv_scr_act());
@@ -205,6 +228,20 @@ void uart_handler::screen_draw_readings(const std::string &rssi, const std::stri
     lv_obj_set_size(snr_obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_text_font(snr_obj, &lv_font_montserrat_36, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_text_fmt(snr_obj, "SNR: %s", snr.c_str());
+
+    lvgl_port_unlock();
+}
+
+void uart_handler::screen_clear()
+{
+    if (!lvgl_port_lock(pdMS_TO_TICKS(1000))) {
+        return;
+    }
+
+    if (base_obj != nullptr) {
+        lv_obj_delete(base_obj);
+        base_obj = nullptr;
+    }
 
     lvgl_port_unlock();
 }
