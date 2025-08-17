@@ -126,12 +126,13 @@ public:
 
 public:
     lplora_radio(gpio_num_t tx, gpio_num_t rx) : tx_pin(tx), rx_pin(rx) {};
-    esp_err_t init();
+    esp_err_t init(uint32_t malloc_cap = MALLOC_CAP_SPIRAM, size_t task_size = 8192);
     esp_err_t send_packet(lplora_radio::uart_packet_type pkt_type, uint8_t *payload, size_t len, uint32_t wait_tick = pdMS_TO_TICKS(200));
 
 
 private:
     static void uart_evt_task_func(void *_ctx);
+    static void packet_dispatcher_task_func(void *_ctx);
     esp_err_t slip_tx(uint8_t *buf, size_t len, uint32_t wait_ticks = 0);
 
 private:
@@ -151,5 +152,13 @@ private:
     static const constexpr uint8_t SLIP_ESC_END = 0xDC;
     static const constexpr uint8_t SLIP_ESC_ESC = 0xDD;
     static const constexpr uint8_t SLIP_ESC_START = 0xDE;
+
+public:
+    class rx_handler
+    {
+    public:
+        virtual esp_err_t on_packet_received(lplora_radio::uart_packet_type type, uint8_t *payload, size_t payload_len) = 0;
+        virtual esp_err_t on_packet_corrupted(lplora_radio::uart_packet_type type) = 0;
+    };
 };
 
