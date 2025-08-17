@@ -6,7 +6,7 @@
 class lplora_utils
 {
 public:
-    static uint16_t calc_crc16(const uint8_t *data, size_t len);
+    static uint16_t calc_crc16(const uint8_t *data, size_t len, uint16_t init = 0);
 
 private:
     // Same as Rust's CRC-16 KERMIT
