@@ -4,6 +4,7 @@
 #include <driver/uart.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/ringbuf.h>
+#include <freertos/semphr.h>
 #include "freertos/queue.h"
 #include <freertos/task.h>
 #include "hal/uart_types.h"
@@ -126,17 +127,19 @@ public:
 public:
     lplora_radio(gpio_num_t tx, gpio_num_t rx) : tx_pin(tx), rx_pin(rx) {};
     esp_err_t init();
+    esp_err_t send_packet(lplora_radio::uart_packet_type pkt_type, uint8_t *payload, size_t len, uint32_t wait_tick = pdMS_TO_TICKS(200));
 
 
 private:
     static void uart_evt_task_func(void *_ctx);
-    esp_err_t send_internal(uart_packet_header *header, uint8_t *payload, size_t len);
+    esp_err_t slip_tx(uint8_t *buf, size_t len, uint32_t wait_ticks = 0);
 
 private:
     gpio_num_t tx_pin;
     gpio_num_t rx_pin;
     uart_port_t port = UART_NUM_2;
     QueueHandle_t uart_evt_queue = nullptr;
+    SemaphoreHandle_t tx_lock = nullptr;
     TaskHandle_t uart_task = nullptr;
     RingbufHandle_t rx_rb = nullptr;
 
